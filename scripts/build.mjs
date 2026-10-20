@@ -6,9 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import {
   PROVIDERS, modelChoices, labelOf, MAX_AUTHOR, MAX_PDF_BYTES, MAX_MODEL_OTHER, MAX_PURPOSE, MAX_COMMENT,
-  MAX_REPORT_REASON, MAX_REPORT_CONTACT, DAILY_LIMIT,
+  MAX_REPORT_REASON, MAX_REPORT_CONTACT, DAILY_LIMIT, MAX_PAPER_TEXT,
 } from '../shared/fields.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -18,6 +19,8 @@ const args = Object.fromEntries(
 const dataDir = path.resolve(args.data || 'dev_repo');
 const outDir = path.resolve(args.out || 'site');
 const config = JSON.parse(fs.readFileSync(path.resolve(root, args.config || 'config.json'), 'utf8'));
+// Xのカード用の画像は作るのに時間がかかるので、一度作ったものはここに取っておく（Actions ではキャッシュする）
+const ogCache = path.resolve(args['og-cache'] || path.join(root, '.og-cache'));
 
 const LANGS = ['ja', 'en'];
 const dirOf = (lang) => (lang === 'en' ? 'en/' : '');
@@ -65,6 +68,7 @@ const T = {
       pdf: '論文のPDF',
       remove: 'この論文の削除を依頼する',
       share: (label, comment) => `${label}が書いた論文${comment ? `。${comment}` : ''}`,
+      fromText: '形式', fromTextValue: '貼り付けた文章からPDFにしたもの',
     },
     form: {
       lead: 'AIに書かせた論文のPDFを投稿できます。投稿すると、誰でも読めるように公開されます。投稿する前に<a href="about.html">このサイトについて</a>を読んでください。',
@@ -74,6 +78,8 @@ const T = {
       required: '必須', optional: '任意',
       choose: '選んでください', chooseFirst: '先に書いたAIを選んでください',
       send: '投稿する',
+      paper: '論文', modePdf: 'PDFを添付する', modeText: '文章を貼り付ける',
+      text: '論文の文章', textNote: '必須・送る前にPDFにします。図や表は入りません',
     },
     reportForm: {
       lead: '消してほしい論文と、その理由を書いてください。書いた内容は公開されません。',
@@ -150,6 +156,7 @@ const T = {
       pdf: 'PDF of the paper',
       remove: 'Request removal of this paper',
       share: (label, comment) => `A paper written by ${label}${comment ? `. ${comment}` : ''}`,
+      fromText: 'Format', fromTextValue: 'Made into a PDF from pasted text',
     },
     form: {
       lead: 'You can post the PDF of a paper written by AI. Once posted, it is published for anyone to read. Please read <a href="about.html">About</a> before posting.',
@@ -159,6 +166,8 @@ const T = {
       required: 'Required', optional: 'Optional',
       choose: 'Choose one', chooseFirst: 'Choose the AI first',
       send: 'Post',
+      paper: 'Paper', modePdf: 'Attach a PDF', modeText: 'Paste the text',
+      text: 'Text of the paper', textNote: 'Required. It is turned into a PDF before sending. Figures and tables are not included',
     },
     reportForm: {
       lead: 'Tell us which paper you want removed and why. What you write here is not published.',
@@ -208,6 +217,7 @@ export function build() {
     const dst = path.join(outDir, 'papers', m.id);
     fs.mkdirSync(dst, { recursive: true });
     fs.copyFileSync(path.join(dataDir, 'papers', m.id, 'paper.pdf'), path.join(dst, 'paper.pdf'));
+    m.og = ogImage(m);
   }
   for (const lang of LANGS) {
     const write = (rel, html) => {
@@ -224,9 +234,31 @@ export function build() {
   }
   fs.writeFileSync(path.join(outDir, '404.html'), notFoundPage());
   fs.copyFileSync(path.join(root, 'site_src', 'style.css'), path.join(outDir, 'style.css'));
-  for (const f of ['submit.js', 'likes.js', 'report.js', 'turnstile.js']) fs.copyFileSync(path.join(root, 'site_src', f), path.join(outDir, f));
+  for (const f of ['submit.js', 'likes.js', 'report.js', 'turnstile.js', 'paste-pdf.js']) fs.copyFileSync(path.join(root, 'site_src', f), path.join(outDir, f));
+  for (const d of ['vendor', 'fonts']) fs.cpSync(path.join(root, 'site_src', d), path.join(outDir, d), { recursive: true });
   fs.writeFileSync(path.join(outDir, 'robots.txt'), 'User-agent: *\nAllow: /\n');
   return papers.length;
+}
+
+// 論文の1ページ目を、横1200で上から630の高さに切り抜いた画像にする（Xの大きいカードの比率）。
+// 作れなかった時は画像なしのカードにする
+function ogImage(m) {
+  const cached = path.join(ogCache, `${m.id}.png`);
+  try {
+    if (!fs.existsSync(cached)) {
+      fs.mkdirSync(ogCache, { recursive: true });
+      execFileSync('pdftoppm', [
+        '-png', '-f', '1', '-l', '1', '-singlefile', '-scale-to-x', '1200', '-scale-to-y', '-1',
+        '-x', '0', '-y', '0', '-W', '1200', '-H', '630',
+        path.join(dataDir, 'papers', m.id, 'paper.pdf'), cached.replace(/\.png$/, ''),
+      ], { timeout: 30000, stdio: 'ignore' });
+    }
+    fs.mkdirSync(path.join(outDir, 'og'), { recursive: true });
+    fs.copyFileSync(cached, path.join(outDir, 'og', `${m.id}.png`));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readPapers() {
@@ -262,7 +294,8 @@ function layout({ lang, rel, title, body, indexable = false, share, extraHead = 
     `<meta property="og:title" content="${esc((share || {}).title || title)}">`,
     `<meta property="og:description" content="${esc((share || {}).description || t.description)}">`,
     config.site_url ? `<meta property="og:url" content="${esc(pageUrl(lang))}">` : '',
-    '<meta name="twitter:card" content="summary">',
+    (share || {}).image && config.site_url ? `<meta property="og:image" content="${esc(config.site_url + share.image)}">` : '',
+    `<meta name="twitter:card" content="${(share || {}).image && config.site_url ? 'summary_large_image' : 'summary'}">`,
     ...(indexable && config.site_url ? LANGS.map((l) => `<link rel="alternate" hreflang="${l}" href="${esc(pageUrl(l))}">`) : []),
     `<link rel="stylesheet" href="${base}style.css">`,
     extraHead,
@@ -344,7 +377,7 @@ function paperPage(lang, m) {
     lang,
     rel: `p/${m.id}.html`,
     title: `${cut(m.purpose, 40)} — ${t.title}`,
-    share: { title: cut(m.purpose, 60), description: p.share(label, m.comment) },
+    share: { title: cut(m.purpose, 60), description: p.share(label, m.comment), image: m.og ? `og/${m.id}.png` : '' },
     body: `<article class="paper">
 <p class="label">${p.purpose}</p>
 <h1>${esc(m.purpose)}</h1>
@@ -353,6 +386,7 @@ function paperPage(lang, m) {
   <dt>${p.posted}</dt><dd>${t.date(m.created_at)}</dd>
   ${m.author ? `<dt>${p.author}</dt><dd>${esc(m.author)} <span class="self">${p.self}</span></dd>` : ''}
   ${m.comment ? `<dt>${p.comment}</dt><dd>${esc(m.comment)}</dd>` : ''}
+  ${m.made_from_text ? `<dt>${p.fromText}</dt><dd>${p.fromTextValue}</dd>` : ''}
 </dl>
 <p class="actions"><a class="btn" href="${pdf}">${p.open}</a>
 <button type="button" class="btn like" data-id="${esc(m.id)}" aria-pressed="false" disabled><span class="heart">♡</span> ${p.like} <span class="n"></span></button></p>
@@ -374,7 +408,7 @@ function submitPage(lang) {
   const f = t.form;
   const opts = PROVIDERS.map((p) => `<option value="${esc(p)}">${esc(labelOf(p, lang))}</option>`).join('');
   const choices = Object.fromEntries(PROVIDERS.map((p) => [p, modelChoices(p).map((m) => [m, labelOf(m, lang)])]));
-  const data = JSON.stringify({ choices, choose: f.choose, chooseFirst: f.chooseFirst }).replace(/</g, '\\u003c');
+  const data = JSON.stringify({ choices, choose: f.choose, chooseFirst: f.chooseFirst, creator: t.title }).replace(/</g, '\\u003c');
   return layout({
     lang,
     rel: 'submit.html',
@@ -385,8 +419,17 @@ function submitPage(lang) {
 <p class="lead">${f.lead}</p>
 <script type="application/json" id="model-choices">${data}</script>
 <form id="f" class="form" data-endpoint="${esc(endpoint(lang, 'submit'))}" data-max="${MAX_PDF_BYTES}">
-  <label>${ttl(f.pdf, f.pdfNote, 'req')}
+  <fieldset class="mode">
+    <legend>${f.paper}</legend>
+    <label class="radio"><input type="radio" name="mode" value="pdf" checked> ${f.modePdf}</label>
+    <label class="radio"><input type="radio" name="mode" value="text"> ${f.modeText}</label>
+  </fieldset>
+  <label id="pdf-box">${ttl(f.pdf, f.pdfNote, 'req')}
     <input type="file" name="pdf" accept="application/pdf,.pdf" required>
+  </label>
+  <label id="text-box" hidden>${ttl(f.text, f.textNote, 'req')}
+    <textarea name="paper_text" rows="14" maxlength="${MAX_PAPER_TEXT}" disabled></textarea>
+    <span class="counter" data-for="paper_text" data-max="${MAX_PAPER_TEXT}"></span>
   </label>
   <label>${ttl(f.provider, f.required, 'req')}
     <select name="provider" required><option value="">${f.choose}</option>${opts}</select>
@@ -412,6 +455,7 @@ function submitPage(lang) {
   <button type="submit" class="btn primary">${f.send}</button>
   <p id="status" class="status" role="status"></p>
 </form>
+<script src="${assetBase(lang)}paste-pdf.js"></script>
 <script src="${assetBase(lang)}submit.js"></script>`,
   });
 }

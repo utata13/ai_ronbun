@@ -215,6 +215,7 @@ async function submit(req, env, cors, lang) {
     purpose,
     comment: comment || null,
     author: author || null, // 投稿者が自分で書いたもの（名前・X・ペンネームなど何でも）。本人か確かめていない
+    made_from_text: str(form.get('made_from_text')) === '1', // 貼り付けた文章をブラウザでPDFにしたもの
   };
 
   // 本文が先、meta.json が後。一覧は meta.json があるものだけを拾うので、途中で失敗しても半端な投稿は出ない

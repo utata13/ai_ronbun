@@ -137,3 +137,6 @@ main { max-width: 820px; margin: 0 auto; padding: 16px 16px 64px; }
   .top { flex-direction: column; align-items: flex-start; }
   .nav { justify-content: flex-start; }
 }
+.mode { border: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.mode legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.form label.radio { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }

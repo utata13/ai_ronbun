@@ -42,6 +42,7 @@ export const MAX_PURPOSE = 400;
 export const MAX_COMMENT = 100;
 export const MAX_AUTHOR = 50;
 export const DAILY_LIMIT = 5;
+export const MAX_PAPER_TEXT = 100000; // 文章を貼り付けて投稿する時の上限
 export const MAX_REPORT_REASON = 1000;
 export const MAX_REPORT_CONTACT = 200;
 

@@ -30,7 +30,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: node scripts/build.mjs --data data --out _site --config config.json
+      - run: sudo apt-get install -y -qq poppler-utils
+      - uses: actions/cache@v6
+        with:
+          path: .og-cache
+          key: og-${{ github.run_id }}
+          restore-keys: og-
+      - run: node scripts/build.mjs --data data --out _site --config config.json --og-cache .og-cache
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
