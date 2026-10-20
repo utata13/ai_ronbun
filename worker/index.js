@@ -21,49 +21,80 @@ export default {
     };
     const url = new URL(req.url);
     const route = `${req.method} ${url.pathname}`;
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'ja';
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (req.method === 'POST' && req.headers.get('Origin') !== env.SITE_ORIGIN) {
-      return json({ error: 'このページからは送れません。' }, 403, cors);
+      return fail(lang, 'origin', 403, cors);
     }
     try {
-      if (route === 'POST /api/submit') return await submit(req, env, cors);
-      if (route === 'POST /api/report') return await report(req, env, cors);
+      if (route === 'POST /api/submit') return await submit(req, env, cors, lang);
+      if (route === 'POST /api/report') return await report(req, env, cors, lang);
       if (route === 'GET /api/likes') return await getLikes(req, env, cors, url);
-      if (route === 'POST /api/like') return await setLike(req, env, cors);
+      if (route === 'POST /api/like') return await setLike(req, env, cors, lang);
       return json({ error: 'not found' }, 404, cors);
     } catch (e) {
       console.error(e);
-      return json({ error: 'サーバーでエラーが起きました。時間をおいてもう一度試してください。' }, 500, cors);
+      return fail(lang, 'server', 500, cors);
     }
   },
 };
 
+// 画面に返す文言。英語版のページは ?lang=en を付けて呼ぶ
+const MSG = {
+  origin: { ja: 'このページからは送れません。', en: 'Requests are only accepted from the site itself.' },
+  server: { ja: 'サーバーでエラーが起きました。時間をおいてもう一度試してください。', en: 'Something went wrong on the server. Please try again later.' },
+  turnstile: { ja: '確認（ロボットでないことのチェック）が通りませんでした。もう一度試してください。', en: 'The robot check did not pass. Please try again.' },
+  reportLimit: { ja: '1日に送れるのは{n}件までです。', en: 'You can send up to {n} requests a day.' },
+  reportPaper: { ja: '論文のページのURLを書いてください。', en: "Please enter the URL of the paper's page." },
+  reportReason: { ja: '理由を書いてください。', en: 'Please enter a reason.' },
+  reportReasonLong: { ja: '理由は{n}字までです。', en: 'The reason must be {n} characters or fewer.' },
+  reportContactLong: { ja: '連絡先は{n}字までです。', en: 'Contact details must be {n} characters or fewer.' },
+  likeMissing: { ja: 'その論文は見つかりません。', en: 'That paper was not found.' },
+  pdfSize: { ja: 'PDFは10MBまでです。', en: 'The PDF must be 10 MB or smaller.' },
+  submitLimit: { ja: '1日に投稿できるのは{n}本までです。', en: 'You can post up to {n} papers a day.' },
+  provider: { ja: '書いたAIを選んでください。', en: 'Please choose the AI that wrote it.' },
+  model: { ja: 'モデルを選んでください。', en: 'Please choose the model.' },
+  modelOther: { ja: '一覧にないモデルの名前を書いてください。', en: 'Please enter the name of the model.' },
+  modelOtherLong: { ja: 'モデルの名前は{n}字までです。', en: 'The model name must be {n} characters or fewer.' },
+  purpose: { ja: '何を調べようとしたかを書いてください。', en: 'Please enter what you wanted to find out.' },
+  purposeLong: { ja: '何を調べようとしたかは{n}字までです。', en: 'This must be {n} characters or fewer.' },
+  commentLong: { ja: '一言は{n}字までです。', en: 'The comment must be {n} characters or fewer.' },
+  authorLong: { ja: '投稿者は{n}字までです。', en: 'The poster field must be {n} characters or fewer.' },
+  pdfMissing: { ja: 'PDFを添付してください。', en: 'Please attach a PDF.' },
+  notPdf: { ja: 'PDFではないファイルです。', en: 'That file is not a PDF.' },
+};
+
+function fail(lang, key, status, cors, n) {
+  return json({ error: MSG[key][lang].replace('{n}', n) }, status, cors);
+}
+
 const PAPER_ID = /^\d{8}-\d{6}-[0-9a-f]{4}$/;
 const REPORT_DAILY_LIMIT = 10;
 
-async function report(req, env, cors) {
+async function report(req, env, cors, lang) {
   const form = await req.formData();
   const ip = req.headers.get('CF-Connecting-IP') || 'local';
   if (!(await verifyTurnstile(form.get('cf-turnstile-response'), ip, env))) {
-    return json({ error: '確認（ロボットでないことのチェック）が通りませんでした。もう一度試してください。' }, 400, cors);
+    return fail(lang, 'turnstile', 400, cors);
   }
   const rateKey = `rr:${await sha256hex(env.IP_SALT + ip)}:${jst(new Date()).slice(0, 10)}`;
   const used = Number((await env.RATE.get(rateKey)) || 0);
-  if (used >= REPORT_DAILY_LIMIT) return json({ error: `1日に送れるのは${REPORT_DAILY_LIMIT}件までです。` }, 429, cors);
+  if (used >= REPORT_DAILY_LIMIT) return fail(lang, 'reportLimit', 429, cors, REPORT_DAILY_LIMIT);
 
   const paper = str(form.get('paper'));
   const reason = str(form.get('reason'));
   const contact = str(form.get('contact'));
   const id = (paper.match(/\d{8}-\d{6}-[0-9a-f]{4}/) || [])[0];
-  if (!id) return json({ error: '論文のページのURLを書いてください。' }, 400, cors);
-  if (!reason) return json({ error: '理由を書いてください。' }, 400, cors);
-  if ([...reason].length > MAX_REPORT_REASON) return json({ error: `理由は${MAX_REPORT_REASON}字までです。` }, 400, cors);
-  if ([...contact].length > MAX_REPORT_CONTACT) return json({ error: `連絡先は${MAX_REPORT_CONTACT}字までです。` }, 400, cors);
+  if (!id) return fail(lang, 'reportPaper', 400, cors);
+  if (!reason) return fail(lang, 'reportReason', 400, cors);
+  if ([...reason].length > MAX_REPORT_REASON) return fail(lang, 'reportReasonLong', 400, cors, MAX_REPORT_REASON);
+  if ([...contact].length > MAX_REPORT_CONTACT) return fail(lang, 'reportContactLong', 400, cors, MAX_REPORT_CONTACT);
 
   const body = [
     `論文: ${env.SITE_ORIGIN}${env.SITE_BASE_PATH || '/'}p/${id}.html`,
     `消す場所: papers/${id}/`,
     `受付: ${jst(new Date()).replace('T', ' ')}（日本時間）`,
+    `送った画面: ${lang === 'en' ? '英語版' : '日本語版'}`,
     '', '## 理由', reason, '', '## 連絡先', contact || '（なし）',
   ].join('\n');
   const r = await fetch(`${env.GITHUB_API}/repos/${env.REPORT_REPO}/issues`, {
@@ -102,7 +133,7 @@ async function getLikes(req, env, cors, url) {
 }
 
 // { id, liked: true|false } を受けて、押す・取り消す
-async function setLike(req, env, cors) {
+async function setLike(req, env, cors, lang) {
   const body = await req.json().catch(() => ({}));
   const id = String(body.id || '');
   if (!PAPER_ID.test(id)) return json({ error: 'bad id' }, 400, cors);
@@ -113,7 +144,7 @@ async function setLike(req, env, cors) {
     const known = await env.DB.prepare('SELECT 1 FROM like_counts WHERE paper_id = ?').bind(id).first();
     if (!known) {
       const r = await fetch(`${env.SITE_ORIGIN}${env.SITE_BASE_PATH || "/"}p/${id}.html`, { method: "HEAD" });
-      if (!r.ok) return json({ error: 'その論文は見つかりません。' }, 404, cors);
+      if (!r.ok) return fail(lang, 'likeMissing', 404, cors);
     }
     const ins = await env.DB.prepare('INSERT OR IGNORE INTO likes (paper_id, voter, created_at) VALUES (?, ?, ?)')
       .bind(id, voter, new Date().toISOString()).run();
@@ -131,22 +162,22 @@ async function setLike(req, env, cors) {
   return json({ count: row?.n ?? 0, liked: !!body.liked }, 200, cors);
 }
 
-async function submit(req, env, cors) {
+async function submit(req, env, cors, lang) {
   const len = Number(req.headers.get('Content-Length') || 0);
-  if (len > MAX_PDF_BYTES + 64 * 1024) return json({ error: 'PDFは10MBまでです。' }, 413, cors);
+  if (len > MAX_PDF_BYTES + 64 * 1024) return fail(lang, 'pdfSize', 413, cors);
 
   const form = await req.formData();
   const ip = req.headers.get('CF-Connecting-IP') || 'local';
 
   if (!(await verifyTurnstile(form.get('cf-turnstile-response'), ip, env))) {
-    return json({ error: '確認（ロボットでないことのチェック）が通りませんでした。もう一度試してください。' }, 400, cors);
+    return fail(lang, 'turnstile', 400, cors);
   }
 
   const now = new Date();
   const day = jst(now).slice(0, 10);
   const rateKey = `rl:${await sha256hex(env.IP_SALT + ip)}:${day}`;
   const used = Number((await env.RATE.get(rateKey)) || 0);
-  if (used >= DAILY_LIMIT) return json({ error: `1日に投稿できるのは${DAILY_LIMIT}本までです。` }, 429, cors);
+  if (used >= DAILY_LIMIT) return fail(lang, 'submitLimit', 429, cors, DAILY_LIMIT);
 
   const provider = str(form.get('provider'));
   const model = str(form.get('model'));
@@ -156,20 +187,20 @@ async function submit(req, env, cors) {
   const author = str(form.get('author'));
   const pdf = form.get('pdf');
 
-  if (!PROVIDERS.includes(provider)) return json({ error: '書いたAIを選んでください。' }, 400, cors);
-  if (!modelChoices(provider).includes(model)) return json({ error: 'モデルを選んでください。' }, 400, cors);
-  if (model === MODEL_NOT_LISTED && !modelOther) return json({ error: '一覧にないモデルの名前を書いてください。' }, 400, cors);
-  if ([...modelOther].length > MAX_MODEL_OTHER) return json({ error: `モデルの名前は${MAX_MODEL_OTHER}字までです。` }, 400, cors);
-  if (!purpose) return json({ error: '何を調べようとしたかを書いてください。' }, 400, cors);
-  if ([...purpose].length > MAX_PURPOSE) return json({ error: `何を調べようとしたかは${MAX_PURPOSE}字までです。` }, 400, cors);
-  if ([...comment].length > MAX_COMMENT) return json({ error: `一言は${MAX_COMMENT}字までです。` }, 400, cors);
-  if ([...author].length > MAX_AUTHOR) return json({ error: `投稿者は${MAX_AUTHOR}字までです。` }, 400, cors);
-  if (!pdf || typeof pdf === 'string') return json({ error: 'PDFを添付してください。' }, 400, cors);
-  if (pdf.size > MAX_PDF_BYTES) return json({ error: 'PDFは10MBまでです。' }, 413, cors);
+  if (!PROVIDERS.includes(provider)) return fail(lang, 'provider', 400, cors);
+  if (!modelChoices(provider).includes(model)) return fail(lang, 'model', 400, cors);
+  if (model === MODEL_NOT_LISTED && !modelOther) return fail(lang, 'modelOther', 400, cors);
+  if ([...modelOther].length > MAX_MODEL_OTHER) return fail(lang, 'modelOtherLong', 400, cors, MAX_MODEL_OTHER);
+  if (!purpose) return fail(lang, 'purpose', 400, cors);
+  if ([...purpose].length > MAX_PURPOSE) return fail(lang, 'purposeLong', 400, cors, MAX_PURPOSE);
+  if ([...comment].length > MAX_COMMENT) return fail(lang, 'commentLong', 400, cors, MAX_COMMENT);
+  if ([...author].length > MAX_AUTHOR) return fail(lang, 'authorLong', 400, cors, MAX_AUTHOR);
+  if (!pdf || typeof pdf === 'string') return fail(lang, 'pdfMissing', 400, cors);
+  if (pdf.size > MAX_PDF_BYTES) return fail(lang, 'pdfSize', 413, cors);
 
   const bytes = new Uint8Array(await pdf.arrayBuffer());
   if (Buffer.from(bytes.subarray(0, 5)).toString('latin1') !== '%PDF-') {
-    return json({ error: 'PDFではないファイルです。' }, 400, cors);
+    return fail(lang, 'notPdf', 400, cors);
   }
 
   const stamp = jst(now).replace(/[-:]/g, '').replace('T', '-').slice(0, 15); // 20261021-013000

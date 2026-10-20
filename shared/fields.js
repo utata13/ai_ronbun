@@ -44,3 +44,12 @@ export const MAX_AUTHOR = 50;
 export const DAILY_LIMIT = 5;
 export const MAX_REPORT_REASON = 1000;
 export const MAX_REPORT_CONTACT = 200;
+
+// 英語版の画面で値の代わりに出す表示名（保存する値は日本語のまま）
+export const LABELS_EN = {
+  その他: 'Other',
+  わからない: "Don't know",
+  'Meta（Muse / Llama）': 'Meta (Muse / Llama)',
+  一覧にない: 'Not in the list',
+};
+export const labelOf = (v, lang) => (lang === 'en' && LABELS_EN[v]) || v;

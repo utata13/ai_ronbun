@@ -1,5 +1,6 @@
 {
   "site_title": "誰でもAI論文置き場",
+  "site_title_en": "AI Papers, Posted by Anyone",
   "site_url": "",
   "base_path": "/",
   "api_base": "http://localhost:8852/api",

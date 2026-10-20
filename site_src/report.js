@@ -1,4 +1,16 @@
 (() => {
+  const en = document.documentElement.lang === 'en';
+  const MSG = en ? {
+    robot: 'Please tick "I am not a robot" (the robot check).',
+    sending: 'Sending…',
+    failed: (s) => `Could not send (${s})`,
+    done: 'Received. We will check it and respond.',
+  } : {
+    robot: '「私はロボットではありません」にチェックを入れてください。',
+    sending: '送っています…',
+    failed: (s) => `送れませんでした（${s}）`,
+    done: '受け付けました。確認して対応します。',
+  };
   const form = document.getElementById('r');
   const status = document.getElementById('status');
   const button = form.querySelector('button[type=submit]');
@@ -10,17 +22,17 @@
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!window.tsToken()) {
-      show('「私はロボットではありません」にチェックを入れてください。', true);
+      show(MSG.robot, true);
       return;
     }
     button.disabled = true;
-    show('送っています…', false);
+    show(MSG.sending, false);
     try {
       const r = await fetch(form.dataset.endpoint, { method: 'POST', body: new FormData(form) });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.ok) throw new Error(data.error || `送れませんでした（${r.status}）`);
+      if (!r.ok || !data.ok) throw new Error(data.error || MSG.failed(r.status));
       form.reset();
-      show('受け付けました。確認して対応します。', false);
+      show(MSG.done, false);
     } catch (err) {
       show(err.message, true);
     } finally {
