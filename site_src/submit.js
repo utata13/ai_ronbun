@@ -43,6 +43,10 @@
       show('PDFは10MBまでです。', true);
       return;
     }
+    if (!window.tsToken()) {
+      show('「私はロボットではありません」にチェックを入れてください。', true);
+      return;
+    }
     button.disabled = true;
     show('送っています…', false);
     try {

@@ -9,6 +9,10 @@
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!window.tsToken()) {
+      show('「私はロボットではありません」にチェックを入れてください。', true);
+      return;
+    }
     button.disabled = true;
     show('送っています…', false);
     try {

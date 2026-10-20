@@ -15,7 +15,9 @@ const args = Object.fromEntries(
 const dataDir = path.resolve(args.data || 'dev_repo');
 const outDir = path.resolve(args.out || 'site');
 const config = JSON.parse(fs.readFileSync(path.resolve(root, args.config || 'config.json'), 'utf8'));
-const TURNSTILE = '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>';
+const turnstileHead = (base) => `<script src="${base}turnstile.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`;
+const turnstileBox = () => `<div class="cf-turnstile" data-sitekey="${esc(config.turnstile_sitekey)}" data-callback="tsOk" data-error-callback="tsError" data-expired-callback="tsExpired" data-language="ja"></div>`;
 
 export function build() {
   fs.rmSync(outDir, { recursive: true, force: true });
@@ -34,7 +36,7 @@ export function build() {
   fs.writeFileSync(path.join(outDir, 'report.html'), reportPage());
   fs.writeFileSync(path.join(outDir, '404.html'), notFoundPage());
   fs.copyFileSync(path.join(root, 'site_src', 'style.css'), path.join(outDir, 'style.css'));
-  for (const f of ['submit.js', 'likes.js', 'report.js']) fs.copyFileSync(path.join(root, 'site_src', f), path.join(outDir, f));
+  for (const f of ['submit.js', 'likes.js', 'report.js', 'turnstile.js']) fs.copyFileSync(path.join(root, 'site_src', f), path.join(outDir, f));
   // 検索エンジンには載せない。Xのカード（共有した時の表示）だけは読ませる
   fs.writeFileSync(path.join(outDir, 'robots.txt'), 'User-agent: Twitterbot\nAllow: /\n\nUser-agent: *\nDisallow: /\n');
   return papers.length;
@@ -159,7 +161,7 @@ function submitPage() {
   return layout({
     title: `投稿する — ${config.site_title}`,
     base: '',
-    extraHead: TURNSTILE,
+    extraHead: turnstileHead(''),
     body: `<h1 class="h">投稿する</h1>
 <p class="lead">AIに書かせた論文のPDFを投稿できます。投稿すると、誰でも読めるように公開されます。投稿する前に<a href="about.html">このサイトについて</a>を読んでください。</p>
 <script type="application/json" id="model-choices">${JSON.stringify(choices).replace(/</g, '\\u003c')}</script>
@@ -187,7 +189,7 @@ function submitPage() {
   <label><span class="ttl">投稿者<span class="opt">任意</span></span>
     <input type="text" name="author" maxlength="${MAX_AUTHOR}">
   </label>
-  <div class="cf-turnstile" data-sitekey="${esc(config.turnstile_sitekey)}"></div>
+  ${turnstileBox()}
   <button type="submit" class="btn primary">投稿する</button>
   <p id="status" class="status" role="status"></p>
 </form>
@@ -243,7 +245,7 @@ function reportPage() {
   return layout({
     title: `削除依頼 — ${config.site_title}`,
     base: '',
-    extraHead: TURNSTILE,
+    extraHead: turnstileHead(''),
     body: `<h1 class="h">削除依頼</h1>
 <p class="lead">消してほしい論文と、その理由を書いてください。書いた内容は公開されません。</p>
 <form id="r" class="form" data-endpoint="${esc(config.api_base)}/report">
@@ -256,7 +258,7 @@ function reportPage() {
   <label><span class="ttl">連絡先<span class="opt">任意・返事が要るときだけ</span></span>
     <input type="text" name="contact" maxlength="${MAX_REPORT_CONTACT}">
   </label>
-  <div class="cf-turnstile" data-sitekey="${esc(config.turnstile_sitekey)}"></div>
+  ${turnstileBox()}
   <button type="submit" class="btn primary">送る</button>
   <p id="status" class="status" role="status"></p>
 </form>
