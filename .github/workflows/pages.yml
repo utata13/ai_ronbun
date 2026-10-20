@@ -1,0 +1,45 @@
+# サイトを作り直して GitHub Pages に公開する。
+# 投稿は非公開リポジトリ（ai_ronbun-data）にあり、そこに変更があると repository_dispatch で呼ばれる。
+name: サイトを作り直して公開
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [papers-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: utata13/ai_ronbun-data
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/build.mjs --data data --out _site --config config.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

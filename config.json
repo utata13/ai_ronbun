@@ -1,0 +1,7 @@
+{
+  "site_title": "誰でもAI論文置き場",
+  "site_url": "https://utata13.github.io/ai_ronbun/",
+  "base_path": "/ai_ronbun/",
+  "api_base": "https://ai-ronbun-submit.tsukuriba.workers.dev/api",
+  "turnstile_sitekey": "0x4AAAAAAFd9fX4PXC1-J4Vt"
+}

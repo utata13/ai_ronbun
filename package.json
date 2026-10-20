@@ -1,0 +1,15 @@
+{
+  "name": "ai_ronbun",
+  "version": "1.0.0",
+  "description": "AIに書かせた論文を一般の人が投稿するサイトの試作",
+  "scripts": {
+    "dev:site": "node scripts/dev-server.mjs",
+    "dev:worker": "wrangler dev",
+    "build": "node scripts/build.mjs --data . --out _site"
+  },
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.151.3"
+  },
+  "private": true
+}

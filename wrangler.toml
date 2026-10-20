@@ -1,0 +1,26 @@
+name = "ai-ronbun-submit"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+GITHUB_API = "https://api.github.com"
+GITHUB_REPO = "utata13/ai_ronbun-data"   # 投稿を書き込む非公開リポジトリ
+GITHUB_BRANCH = "main"
+REPORT_REPO = "utata13/ai_ronbun-data"   # 削除依頼を Issue として届ける非公開リポジトリ
+SITE_ORIGIN = "https://utata13.github.io"   # 公開サイトのオリジン。フォームはここからしか受け付けない
+SITE_BASE_PATH = "/ai_ronbun/"
+# 秘密の値は wrangler secret put で入れる: GITHUB_TOKEN / TURNSTILE_SECRET / IP_SALT
+
+[[kv_namespaces]]
+binding = "RATE"
+id = "854b52f99ee34f488877d91de59871d9"
+
+[dev]
+port = 8852
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ai-ronbun"
+database_id = "ca0e2dfd-a1d3-47f5-b67f-7c577093c0b1"
+migrations_dir = "migrations"
